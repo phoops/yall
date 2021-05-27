@@ -1,3 +1,4 @@
+// Package zap_logger provides an implementation of the Yall logger interface
 package zap_logger
 
 import (
@@ -11,19 +12,20 @@ import (
 
 type Field = zap.Field
 
+// Error is a convenience method to make logging errors easier
 func Error(err error) Field {
 	return zap.Error(err)
 }
 
-// ZapLogger is just a thin wrapper around a sugared zap logger with some opinionated defaults
-type ZapLogger struct {
+// Logger is just a thin wrapper around a sugared zap logger with some opinionated defaults
+type Logger struct {
 	l    zap.SugaredLogger
-	conf *zapLoggerConf
+	conf *loggerConf
 }
 
-// NewZapLogger creates a new ZapLogger, configured with the passed ZapLoggerOpt args
+// NewLogger creates a new Logger, configured with the passed LoggerOpt args
 // By default, with no options, the logger is configured for development.
-func NewZapLogger(name string, opts ...ZapLoggerOpt) (yall.Logger, error) {
+func NewLogger(name string, opts ...LoggerOpt) (yall.Logger, error) {
 	conf := defaultConf()
 
 	for _, opt := range opts {
@@ -45,54 +47,54 @@ func NewZapLogger(name string, opts ...ZapLoggerOpt) (yall.Logger, error) {
 	}
 	logger = logger.WithOptions(zap.AddCallerSkip(1))
 	sugared := logger.Sugar().With(conf.nameKey, name)
-	return &ZapLogger{
+	return &Logger{
 		l:    *sugared,
 		conf: conf,
 	}, nil
 }
 
-type ZapLoggerOpt func(opts *zapLoggerConf) *zapLoggerConf
+type LoggerOpt func(opts *loggerConf) *loggerConf
 
 // Production uses a zap production config, with ISO 8601 timestamps
-func Production() ZapLoggerOpt {
-	return func(opts *zapLoggerConf) *zapLoggerConf {
+func Production() LoggerOpt {
+	return func(opts *loggerConf) *loggerConf {
 		opts.production = true
 		return opts
 	}
 }
 
 // WithNameKey configures the key to use for the logger's name
-func WithNameKey(nameKey string) ZapLoggerOpt {
-	return func(opts *zapLoggerConf) *zapLoggerConf {
+func WithNameKey(nameKey string) LoggerOpt {
+	return func(opts *loggerConf) *loggerConf {
 		opts.nameKey = nameKey
 		return opts
 	}
 }
 
-// WithExecutionIDKey sets the key to use to log the request id
-func WithExecutionIDKey(requestIDKey string) ZapLoggerOpt {
-	return func(opts *zapLoggerConf) *zapLoggerConf {
+// WithExecutionIDKey sets the key to use to log the execution id
+func WithExecutionIDKey(requestIDKey string) LoggerOpt {
+	return func(opts *loggerConf) *loggerConf {
 		opts.executionIDKey = requestIDKey
 		return opts
 	}
 }
 
-// WithExecutionIDContextKey configures the key to use to extract request id from context
-func WithExecutionIDContextKey(requestIDContextKey interface{}) ZapLoggerOpt {
-	return func(opts *zapLoggerConf) *zapLoggerConf {
+// WithExecutionIDContextKey configures the key to use to extract execution id from context
+func WithExecutionIDContextKey(requestIDContextKey interface{}) LoggerOpt {
+	return func(opts *loggerConf) *loggerConf {
 		opts.executionIDContextKey = requestIDContextKey
 		return opts
 	}
 }
 
-func WithOmitExecutionIDWhenMissing() ZapLoggerOpt {
-	return func(opts *zapLoggerConf) *zapLoggerConf {
+func WithOmitExecutionIDWhenMissing() LoggerOpt {
+	return func(opts *loggerConf) *loggerConf {
 		opts.omitExecutionIDWhenMissing = true
 		return opts
 	}
 }
 
-type zapLoggerConf struct {
+type loggerConf struct {
 	production                 bool
 	nameKey                    string
 	executionIDKey             string
@@ -100,8 +102,8 @@ type zapLoggerConf struct {
 	omitExecutionIDWhenMissing bool
 }
 
-func defaultConf() *zapLoggerConf {
-	return &zapLoggerConf{
+func defaultConf() *loggerConf {
+	return &loggerConf{
 		production:                 false,
 		nameKey:                    "service",
 		executionIDKey:             string(yall.ExecutionIDKey),
@@ -110,63 +112,87 @@ func defaultConf() *zapLoggerConf {
 	}
 }
 
-func (l *ZapLogger) Fatal(ctx context.Context, msg string, keysAndValues ...interface{}) {
-	executionID := l.getExecutionIDFromContext(ctx)
-	if executionID != yall.MissingRequestIDKey || !l.conf.omitExecutionIDWhenMissing {
-		keysAndValues = append([]interface{}{zap.String(l.conf.executionIDKey, executionID)}, keysAndValues...)
-	}
-
+func (l *Logger) Fatal(ctx context.Context, msg string, keysAndValues ...interface{}) {
+	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
 	l.l.Fatalw(msg, keysAndValues...)
 }
 
-func (l *ZapLogger) Panic(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func (l *Logger) Panic(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
 	l.l.Panicw(msg, keysAndValues...)
 }
 
-func (l *ZapLogger) Error(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func (l *Logger) Error(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
 	l.l.Errorw(msg, keysAndValues...)
 }
 
-func (l *ZapLogger) Warn(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func (l *Logger) Warn(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
 	l.l.Warnw(msg, keysAndValues...)
 }
 
-func (l *ZapLogger) Info(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func (l *Logger) Info(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
 	l.l.Infow(msg, keysAndValues...)
 }
 
-func (l *ZapLogger) Debug(ctx context.Context, msg string, keysAndValues ...interface{}) {
+func (l *Logger) Debug(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
 	l.l.Debugw(msg, keysAndValues...)
 }
 
-func (l *ZapLogger) With(args ...interface{}) yall.Logger {
-	return &ZapLogger{
+func (l *Logger) Fatalnc(msg string, keysAndValues ...interface{}) {
+	l.l.Fatalw(msg, keysAndValues...)
+}
+
+func (l *Logger) Panicnc(msg string, keysAndValues ...interface{}) {
+	l.l.Panicw(msg, keysAndValues...)
+}
+
+func (l *Logger) Errornc(msg string, keysAndValues ...interface{}) {
+	l.l.Errorw(msg, keysAndValues...)
+}
+
+func (l *Logger) Warnnc(msg string, keysAndValues ...interface{}) {
+	l.l.Warnw(msg, keysAndValues...)
+}
+
+func (l *Logger) Infonc(msg string, keysAndValues ...interface{}) {
+	l.l.Infow(msg, keysAndValues...)
+}
+
+func (l *Logger) Debugnc(msg string, keysAndValues ...interface{}) {
+	l.l.Debugw(msg, keysAndValues...)
+}
+
+func (l *Logger) With(args ...interface{}) yall.Logger {
+	return &Logger{
 		l:    *l.l.With(args...),
 		conf: l.conf,
 	}
 }
 
-func (l *ZapLogger) addExecutionIDField(ctx context.Context, keysAndValues ...interface{}) []interface{} {
-	executionID := l.getExecutionIDFromContext(ctx)
-	if executionID != yall.MissingRequestIDKey || !l.conf.omitExecutionIDWhenMissing {
+func (l *Logger) addExecutionIDField(ctx context.Context, keysAndValues ...interface{}) []interface{} {
+	executionID := l.ExecutionIDFrom(ctx)
+	if executionID != yall.MissingExecutionID || !l.conf.omitExecutionIDWhenMissing {
 		keysAndValues = append([]interface{}{zap.String(l.conf.executionIDKey, executionID)}, keysAndValues...)
 	}
 	return keysAndValues
 }
 
-func (l *ZapLogger) getExecutionIDFromContext(ctx context.Context) string {
+// ExecutionIDFrom retrieves the execution id from the given context, if present
+func (l *Logger) ExecutionIDFrom(ctx context.Context) string {
+	if ctx == nil {
+		return yall.MissingExecutionID
+	}
 	reqID := ctx.Value(l.conf.executionIDContextKey)
 	if reqID == nil {
-		return yall.MissingRequestIDKey
+		return yall.MissingExecutionID
 	}
 	if reqID, ok := reqID.(string); ok {
 		return reqID
 	} else {
-		return yall.MissingRequestIDKey
+		return yall.MissingExecutionID
 	}
 }
