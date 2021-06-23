@@ -79,3 +79,12 @@ func TestZapLoggerCreate(t *testing.T) {
 		logger.Info(nil, "test")
 	}
 }
+
+func TestExecutionIDFrom(t *testing.T) {
+	ctx := context.WithValue(context.Background(), yall.ExecutionIDKey, "request_id_test123")
+	logger, _ := zaplogger.NewLogger("test")
+
+	executionID := logger.ExecutionIDFrom(ctx)
+	assert.NotEmpty(t, executionID)
+	assert.EqualValues(t, "request_id_test123", executionID)
+}
