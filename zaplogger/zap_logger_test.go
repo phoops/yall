@@ -1,52 +1,53 @@
-package zap_logger_test
+package zaplogger_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/phoops/yall"
-	"github.com/phoops/yall/zap_logger"
+	"github.com/phoops/yall/zaplogger"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestZapLoggerCreate(t *testing.T) {
 	type testCase struct {
 		name string
-		opts []zap_logger.LoggerOpt
+		opts []zaplogger.LoggerOpt
 	}
 
 	testCases := []testCase{
 		{
 			name: "default",
-			opts: []zap_logger.LoggerOpt{},
+			opts: []zaplogger.LoggerOpt{},
 		},
 		{
 			name: "production",
-			opts: []zap_logger.LoggerOpt{zap_logger.Production()},
+			opts: []zaplogger.LoggerOpt{zaplogger.Production()},
 		},
 		{
 			name: "name_key",
-			opts: []zap_logger.LoggerOpt{zap_logger.WithNameKey("test")},
+			opts: []zaplogger.LoggerOpt{zaplogger.WithNameKey("test")},
 		},
 		{
 			name: "execution_id_key",
-			opts: []zap_logger.LoggerOpt{zap_logger.WithExecutionIDKey("different_key")},
+			opts: []zaplogger.LoggerOpt{zaplogger.WithExecutionIDKey("different_key")},
 		},
 		{
 			name: "context_key",
-			opts: []zap_logger.LoggerOpt{zap_logger.WithExecutionIDContextKey("context_key")},
+			opts: []zaplogger.LoggerOpt{zaplogger.WithExecutionIDContextKey("context_key")},
 		},
 		{
 			name: "omit_missing_execution_id",
-			opts: []zap_logger.LoggerOpt{
-				zap_logger.WithOmitExecutionIDWhenMissing(),
-				zap_logger.WithExecutionIDContextKey("context_key"),
+			opts: []zaplogger.LoggerOpt{
+				zaplogger.WithOmitExecutionIDWhenMissing(),
+				zaplogger.WithExecutionIDContextKey("context_key"),
 			},
 		},
 	}
 
 	for _, tc := range testCases {
-		logger, err := zap_logger.NewLogger("test", tc.opts...)
+		logger, err := zaplogger.NewLogger("test", tc.opts...)
 		var _ yall.Logger = logger
 
 		assert.NoError(t, err)
@@ -64,16 +65,17 @@ func TestZapLoggerCreate(t *testing.T) {
 		assert.Panics(t, func() {
 			logger.Panicnc("testing execution_id, panic level")
 		})
-		logger.Error(ctx, "testing execution_id, error level", zap_logger.Error(err))
-		logger.Errornc("testing execution_id, error level")
+		logger.Error(ctx, "testing execution_id, error level", yall.Error(fmt.Errorf("this is an error")))
+		logger.Errornc("testing execution_id, error level", yall.Error(fmt.Errorf("another error")))
 		logger.Warn(ctx, "testing execution_id, warn level")
 		logger.Warnnc("testing execution_id, warn level")
 		logger.Info(ctx, "testing execution_id, info level")
-		logger.Infonc( "testing execution_id, info level")
+		logger.Infonc("testing execution_id, info level")
 		logger.Debug(ctx, "testing execution_id, debug level")
 		logger.Debugnc("testing execution_id, debug level")
 
 		// this shouldn't really happen, but better safe than sorry
+		//nolint:staticcheck
 		logger.Info(nil, "test")
 	}
 }

@@ -1,5 +1,5 @@
 // Package zap_logger provides an implementation of the Yall logger interface
-package zap_logger
+package zaplogger
 
 import (
 	"context"
@@ -10,14 +10,7 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-type Field = zap.Field
-
-// Error is a convenience method to make logging errors easier
-func Error(err error) Field {
-	return zap.Error(err)
-}
-
-// Logger is just a thin wrapper around a sugared zap logger with some opinionated defaults
+// Logger is just a thin wrapper around a sugared zap logger with some opinionated defaults.
 type Logger struct {
 	l    zap.SugaredLogger
 	conf *loggerConf
@@ -55,34 +48,38 @@ func NewLogger(name string, opts ...LoggerOpt) (yall.Logger, error) {
 
 type LoggerOpt func(opts *loggerConf) *loggerConf
 
-// Production uses a zap production config, with ISO 8601 timestamps
+// Production uses a zap production config, with ISO 8601 timestamps.
 func Production() LoggerOpt {
 	return func(opts *loggerConf) *loggerConf {
 		opts.production = true
+
 		return opts
 	}
 }
 
-// WithNameKey configures the key to use for the logger's name
+// WithNameKey configures the key to use for the logger's name.
 func WithNameKey(nameKey string) LoggerOpt {
 	return func(opts *loggerConf) *loggerConf {
 		opts.nameKey = nameKey
+
 		return opts
 	}
 }
 
-// WithExecutionIDKey sets the key to use to log the execution id
+// WithExecutionIDKey sets the key to use to log the execution id.
 func WithExecutionIDKey(requestIDKey string) LoggerOpt {
 	return func(opts *loggerConf) *loggerConf {
 		opts.executionIDKey = requestIDKey
+
 		return opts
 	}
 }
 
-// WithExecutionIDContextKey configures the key to use to extract execution id from context
+// WithExecutionIDContextKey configures the key to use to extract execution id from context.
 func WithExecutionIDContextKey(requestIDContextKey interface{}) LoggerOpt {
 	return func(opts *loggerConf) *loggerConf {
 		opts.executionIDContextKey = requestIDContextKey
+
 		return opts
 	}
 }
@@ -90,6 +87,7 @@ func WithExecutionIDContextKey(requestIDContextKey interface{}) LoggerOpt {
 func WithOmitExecutionIDWhenMissing() LoggerOpt {
 	return func(opts *loggerConf) *loggerConf {
 		opts.omitExecutionIDWhenMissing = true
+
 		return opts
 	}
 }
@@ -114,55 +112,67 @@ func defaultConf() *loggerConf {
 
 func (l *Logger) Fatal(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Fatalw(msg, keysAndValues...)
 }
 
 func (l *Logger) Panic(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Panicw(msg, keysAndValues...)
 }
 
 func (l *Logger) Error(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Errorw(msg, keysAndValues...)
 }
 
 func (l *Logger) Warn(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Warnw(msg, keysAndValues...)
 }
 
 func (l *Logger) Info(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Infow(msg, keysAndValues...)
 }
 
 func (l *Logger) Debug(ctx context.Context, msg string, keysAndValues ...interface{}) {
 	keysAndValues = l.addExecutionIDField(ctx, keysAndValues...)
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Debugw(msg, keysAndValues...)
 }
 
 func (l *Logger) Fatalnc(msg string, keysAndValues ...interface{}) {
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Fatalw(msg, keysAndValues...)
 }
 
 func (l *Logger) Panicnc(msg string, keysAndValues ...interface{}) {
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Panicw(msg, keysAndValues...)
 }
 
 func (l *Logger) Errornc(msg string, keysAndValues ...interface{}) {
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Errorw(msg, keysAndValues...)
 }
 
 func (l *Logger) Warnnc(msg string, keysAndValues ...interface{}) {
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Warnw(msg, keysAndValues...)
 }
 
 func (l *Logger) Infonc(msg string, keysAndValues ...interface{}) {
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Infow(msg, keysAndValues...)
 }
 
 func (l *Logger) Debugnc(msg string, keysAndValues ...interface{}) {
+	keysAndValues = extractFields(keysAndValues...)
 	l.l.Debugw(msg, keysAndValues...)
 }
 
@@ -181,7 +191,7 @@ func (l *Logger) addExecutionIDField(ctx context.Context, keysAndValues ...inter
 	return keysAndValues
 }
 
-// ExecutionIDFrom retrieves the execution id from the given context, if present
+// ExecutionIDFrom retrieves the execution id from the given context, if present.
 func (l *Logger) ExecutionIDFrom(ctx context.Context) string {
 	if ctx == nil {
 		return yall.MissingExecutionID
@@ -192,7 +202,21 @@ func (l *Logger) ExecutionIDFrom(ctx context.Context) string {
 	}
 	if reqID, ok := reqID.(string); ok {
 		return reqID
-	} else {
-		return yall.MissingExecutionID
 	}
+
+	return yall.MissingExecutionID
+}
+
+func extractFields(keysAndValues ...interface{}) []interface{} {
+	var processedKeysAndValues []interface{}
+
+	for _, keyOrValue := range keysAndValues {
+		if field, ok := keyOrValue.(*yall.Field); ok {
+			processedKeysAndValues = append(processedKeysAndValues, field.Name, field.Value)
+		} else {
+			processedKeysAndValues = append(processedKeysAndValues, keyOrValue)
+		}
+	}
+
+	return processedKeysAndValues
 }
